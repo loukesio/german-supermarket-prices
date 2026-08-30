@@ -3,7 +3,7 @@
 An open dataset of grocery and drugstore prices across German retail chains —
 ALDI, dm, EDEKA, Kaufland, Lidl, Netto, PENNY, REWE, Rossmann and others.
 
-Current snapshot: **5,975 prices · 21 retailers** (updated 2026-08-30).
+Current snapshot: **9,109 prices · 16 retailers** (updated 2026-08-30, Göttingen/Berlin/München offer regions).
 
 ## Files
 
