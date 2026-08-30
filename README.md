@@ -12,6 +12,19 @@ Current snapshot: **5,975 prices · 21 retailers** (updated 2026-08-30).
 | `data/prices.csv` | One row per (retailer, product): name, EAN barcode where known, category, price in EUR, price date, collection date, source |
 | `data/prices.sqlite` | The same data as a standalone SQLite database (table `prices`) |
 
+## Interactive dashboard
+
+```bash
+pip install -r requirements.txt
+streamlit run dashboard.py
+```
+
+Cheapest-chain scoreboard, per-product price comparison across chains
+(EAN-matched), biggest price spreads, coverage per source, and the full
+filterable table. Deployable as-is on
+[Streamlit Community Cloud](https://share.streamlit.io) — point it at this
+repo and `dashboard.py`.
+
 ## Sources
 
 Each row's `source` column states where it came from:
