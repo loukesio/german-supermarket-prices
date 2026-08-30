@@ -33,7 +33,7 @@ I18N = {
     "h_spreads": "Die größten Preisunterschiede",
     "x_spreads": "teuerstes ÷ günstigstes Regal",
     "h_search": "Kategorie durchsuchen — alle Produkte, alle Ketten",
-    "c_search": "Jeder Punkt ist ein Produkt; Zeilen sind Ketten. Achtung: Packungsgrößen unterscheiden sich — Details beim Überfahren.",
+    "c_search": "Fläche ∝ 1/Preis — je größer die Kachel, desto billiger das Produkt. Klick auf eine Kette zoomt hinein; Packungsgrößen unterscheiden sich (Hover für Details).",
     "l_search": "Suche, z. B. eier · bio eier · milch · kaffee",
     "no_hits": "Keine Treffer für «{q}».",
     "h_history": "Preisverlauf",
@@ -60,7 +60,7 @@ I18N = {
     "h_spreads": "Biggest price spreads",
     "x_spreads": "priciest ÷ cheapest shelf",
     "h_search": "Search a category — every product, every chain",
-    "c_search": "Each dot is one product; rows are chains. Note pack sizes differ — hover for details.",
+    "c_search": "Area ∝ 1/price — the bigger the tile, the cheaper the product. Click a chain to zoom in; pack sizes differ (hover for details).",
     "l_search": "Search, e.g. eier · bio eier · milch · kaffee",
     "no_hits": "No matches for “{q}”.",
     "h_history": "Price over time",
@@ -87,7 +87,7 @@ I18N = {
     "h_spreads": "Οι μεγαλύτερες διαφορές τιμής",
     "x_spreads": "ακριβότερο ÷ φθηνότερο ράφι",
     "h_search": "Αναζήτηση κατηγορίας — όλα τα προϊόντα, όλες οι αλυσίδες",
-    "c_search": "Κάθε κουκκίδα είναι ένα προϊόν· οι γραμμές είναι αλυσίδες. Προσοχή: οι συσκευασίες διαφέρουν — λεπτομέρειες στο hover.",
+    "c_search": "Εμβαδόν ∝ 1/τιμή — όσο μεγαλύτερο το πλακίδιο, τόσο φθηνότερο το προϊόν. Κλικ σε αλυσίδα για ζουμ· οι συσκευασίες διαφέρουν (hover για λεπτομέρειες).",
     "l_search": "Αναζήτηση, π.χ. eier · bio eier · milch · kaffee",
     "no_hits": "Κανένα αποτέλεσμα για «{q}».",
     "h_history": "Εξέλιξη τιμής στον χρόνο",
@@ -145,10 +145,27 @@ def load():
 
 
 df = load()
-CAT8 = ["#1baf7a", "#eb6834", "#4a3aa7", "#eda100", "#e87ba4", "#008300", "#2a78d6", "#e34948"]
-_rank = df.groupby("retailer").size().sort_values(ascending=False).index
-CHAIN_COLOR = {c: CAT8[i] for i, c in enumerate(_rank[:8])}
-chain_c = lambda c: CHAIN_COLOR.get(c, "#898781")
+# official brand colors, lightness-spread within the red/blue families so
+# chains stay distinguishable; names always accompany the marks
+BRAND = {
+    "REWE":      "#CC071E",   # REWE red (official)
+    "Kaufland":  "#F0331F",   # Kaufland scarlet, brightened
+    "PENNY":     "#8F0F1E",   # PENNY dark red
+    "Rossmann":  "#5C0A14",   # Rossmann cab-sav dark red
+    "Nahkauf":   "#E4572E",   # REWE-group, orange-red
+    "EDEKA":     "#0B72C0",   # EDEKA blue (official)
+    "E-Center":  "#3A8FD1",   # EDEKA family, lighter
+    "Lidl":      "#063A75",   # Lidl navy
+    "ALDI":      "#0FA7DC",   # ALDI light blue
+    "dm":        "#F09500",   # dm golden poppy, deepened
+    "Netto":     "#C7B300",   # Netto lemon yellow, deepened for white
+    "Norma":     "#D02C2F",
+    "Globus":    "#0E8A3E",
+    "tegut":     "#E36F1E",
+    "HIT":       "#B5122E",
+    "CAP-Markt": "#5AA82E",
+}
+chain_c = lambda c: BRAND.get(c, "#898781")
 ean_df = df[df.ean_barcode != ""]
 counts = ean_df.groupby("ean_barcode")["retailer"].nunique()
 multi_eans = counts[counts >= 2].index
@@ -203,34 +220,31 @@ if best.price_eur < worst.price_eur:
 st.subheader(t("h_search"))
 q2 = st.text_input(t("l_search"), value="eier")
 if q2.strip():
-    hits = df[df.product_name.str.lower().str.contains(q2.strip().lower(), na=False)]
+    hits = df[df.product_name.str.lower().str.contains(q2.strip().lower(), na=False)].copy()
     if not len(hits):
         st.caption(t("no_hits", q=q2))
     else:
-        order = (hits.groupby("retailer")["price_eur"].median()
-                     .sort_values(ascending=False).index)
-        figs = px.strip(hits, x="price_eur", y="retailer", color="retailer",
-                        hover_data={"product_name": True, "price_eur": ":.2f",
-                                    "source": True, "retailer": False},
-                        color_discrete_map={c: chain_c(c) for c in hits.retailer.unique()},
-                        category_orders={"retailer": list(order)})
-        figs.update_traces(marker=dict(size=9, opacity=0.85,
-                                       line=dict(width=1, color="white")),
-                           jitter=0.5)
-        figs.update_xaxes(title_text="€", title_font_color=MUTED)
-        figs.update_yaxes(title_text="")
-        # per-chain median tick, drawn in the chain's own color
-        med = hits.groupby("retailer")["price_eur"].median()
-        for chain, mv in med.items():
-            figs.add_scatter(x=[mv], y=[chain], mode="markers",
-                             marker=dict(symbol="line-ns-open", size=26,
-                                         line=dict(width=3, color=chain_c(chain))),
-                             showlegend=False,
-                             hovertemplate=f"{chain} median: €{mv:.2f}<extra></extra>")
-        st.plotly_chart(style(figs, height=90 + 40 * hits.retailer.nunique()),
-                        use_container_width=True)
-        st.caption(" · ".join(f"{c}: {n}" for c, n in
-                              hits.retailer.value_counts().head(8).items()))
+        st.caption(t("c_search"))
+        hits = hits[hits.price_eur > 0]
+        hits["value"] = 1.0 / hits.price_eur          # area ∝ 1/price → cheapest = biggest tile
+        hits["tile"] = (hits.product_name.str.slice(0, 40) + " · €"
+                        + hits.price_eur.map("{:.2f}".format))
+        figt = px.treemap(hits, path=["retailer", "tile"], values="value",
+                          color="retailer",
+                          color_discrete_map={c: chain_c(c) for c in hits.retailer.unique()},
+                          custom_data=["product_name", "price_eur", "source"])
+        figt.update_traces(
+            marker=dict(cornerradius=4, line=dict(width=2, color="white")),
+            textfont=dict(family="system-ui, -apple-system, 'Segoe UI', sans-serif", size=12),
+            hovertemplate="<b>%{customdata[0]}</b><br>€%{customdata[1]:.2f} · "
+                          "%{customdata[2]}<extra>%{root}</extra>")
+        figt.update_layout(height=560, margin=dict(l=4, r=4, t=4, b=4),
+                           paper_bgcolor="white",
+                           font=dict(family="system-ui, -apple-system, 'Segoe UI', sans-serif",
+                                     color=INK))
+        st.plotly_chart(figt, use_container_width=True)
+        cheap = hits.loc[hits.price_eur.idxmin()]
+        st.caption(f"🏆 {cheap.retailer}: {cheap.product_name[:60]} — €{cheap.price_eur:.2f}")
 
 # ── 3b · biggest spreads ─────────────────────────────────────────────────────
 st.subheader(t("h_spreads"))
