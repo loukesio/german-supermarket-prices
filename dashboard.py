@@ -31,6 +31,9 @@ I18N = {
     "c_best": "Am günstigsten bei **{best}** (€{bp:.2f}) — {worst} €{wp:.2f} → Unterschied {r:.2f}×.",
     "h_spreads": "Die größten Preisunterschiede",
     "x_spreads": "teuerstes ÷ günstigstes Regal",
+    "h_history": "Preisverlauf",
+    "c_history": "Echte historische Preise (Open Prices) plus tägliche Schnappschüsse. Punkte = beobachtete Preise.",
+    "l_product_h": "Produkt (mit Preishistorie)",
     "h_coverage": "Abdeckung nach Kette und Quelle",
     "src_op": "Open Prices (Regal)", "src_dm": "dm (Katalog)", "src_mg": "marktguru (Angebote)",
     "t_table": "Vollständige Datentabelle ({n} Zeilen)",
@@ -51,6 +54,9 @@ I18N = {
     "c_best": "Cheapest at **{best}** (€{bp:.2f}) — {worst} €{wp:.2f} → {r:.2f}× difference.",
     "h_spreads": "Biggest price spreads",
     "x_spreads": "priciest ÷ cheapest shelf",
+    "h_history": "Price over time",
+    "c_history": "Real historical prices (Open Prices) plus daily snapshots. Dots are observed prices.",
+    "l_product_h": "Product (with price history)",
     "h_coverage": "Coverage per chain and source",
     "src_op": "Open Prices (shelf)", "src_dm": "dm (catalog)", "src_mg": "marktguru (offers)",
     "t_table": "Full data table ({n} rows)",
@@ -71,6 +77,9 @@ I18N = {
     "c_best": "Φθηνότερα στο **{best}** (€{bp:.2f}) — {worst} €{wp:.2f} → διαφορά {r:.2f}×.",
     "h_spreads": "Οι μεγαλύτερες διαφορές τιμής",
     "x_spreads": "ακριβότερο ÷ φθηνότερο ράφι",
+    "h_history": "Εξέλιξη τιμής στον χρόνο",
+    "c_history": "Πραγματικές ιστορικές τιμές (Open Prices) και ημερήσια στιγμιότυπα. Οι κουκκίδες είναι παρατηρημένες τιμές.",
+    "l_product_h": "Προϊόν (με ιστορικό τιμών)",
     "h_coverage": "Κάλυψη ανά αλυσίδα και πηγή",
     "src_op": "Open Prices (ράφι)", "src_dm": "dm (κατάλογος)", "src_mg": "marktguru (προσφορές)",
     "t_table": "Πλήρης πίνακας δεδομένων ({n} γραμμές)",
@@ -188,7 +197,47 @@ fig = go.Figure(go.Bar(
 fig.update_xaxes(title_text=t("x_spreads"), title_font_color=MUTED)
 st.plotly_chart(style(fig, height=60 + 32 * len(top)), use_container_width=True)
 
-# ── 4 · coverage per retailer & source ───────────────────────────────────────
+# ── 4 · price over time ──────────────────────────────────────────────────────
+CAT8 = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
+
+@st.cache_data
+def load_history():
+    try:
+        h = pd.read_csv("data/price_history.csv", dtype={"ean_barcode": str})
+    except FileNotFoundError:
+        return pd.DataFrame()
+    h["ean_barcode"] = h["ean_barcode"].fillna("")
+    h["date"] = pd.to_datetime(h["date"], errors="coerce")
+    return h.dropna(subset=["date"])
+
+hist = load_history()
+if len(hist):
+    # global fixed chain→color map (color follows the entity, never the filter)
+    chain_rank = hist.groupby("retailer").size().sort_values(ascending=False).index
+    CHAIN_COLOR = {c: CAT8[i] for i, c in enumerate(chain_rank[:8])}
+    st.subheader(t("h_history"))
+    st.caption(t("c_history"))
+    hh = hist[hist.ean_barcode != ""]
+    depth = (hh.groupby("ean_barcode")
+               .agg(pts=("price_eur", "size"), days=("date", "nunique"),
+                    chains=("retailer", "nunique"), name=("product_name", "first")))
+    good = depth[(depth.pts >= 6) & (depth.days >= 3)].sort_values("pts", ascending=False)
+    if len(good):
+        pick = st.selectbox(t("l_product_h"), good.index,
+                            format_func=lambda e: f"{good.loc[e,'name'][:70]}  ·  {e}")
+        hsel = hh[hh.ean_barcode == pick].sort_values("date")
+        fig = go.Figure()
+        for chain, grp in hsel.groupby("retailer"):
+            if len(grp) < 2 and len(hsel.retailer.unique()) > 6:
+                continue
+            fig.add_scatter(x=grp.date, y=grp.price_eur, mode="lines+markers",
+                            name=chain, line=dict(width=2, color=CHAIN_COLOR.get(chain, "#898781")),
+                            marker=dict(size=8, color=CHAIN_COLOR.get(chain, "#898781")),
+                            hovertemplate=chain + " · %{x|%d.%m.%Y}: €%{y:.2f}<extra></extra>")
+        fig.update_yaxes(title_text="€", title_font_color=MUTED, rangemode="tozero")
+        st.plotly_chart(style(fig, height=400, showlegend=True), use_container_width=True)
+
+# ── 5 · coverage per retailer & source ───────────────────────────────────────
 st.subheader(t("h_coverage"))
 cov = df.groupby(["retailer", "source"]).size().unstack(fill_value=0)
 cov = cov.loc[cov.sum(axis=1).sort_values().index].tail(10)
