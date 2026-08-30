@@ -7,6 +7,7 @@ Reads data/prices.csv (see README.md for sources & caveats).
 """
 
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -31,6 +32,10 @@ I18N = {
     "c_best": "Am günstigsten bei **{best}** (€{bp:.2f}) — {worst} €{wp:.2f} → Unterschied {r:.2f}×.",
     "h_spreads": "Die größten Preisunterschiede",
     "x_spreads": "teuerstes ÷ günstigstes Regal",
+    "h_search": "Kategorie durchsuchen — alle Produkte, alle Ketten",
+    "c_search": "Jeder Punkt ist ein Produkt; Zeilen sind Ketten. Achtung: Packungsgrößen unterscheiden sich — Details beim Überfahren.",
+    "l_search": "Suche, z. B. eier · bio eier · milch · kaffee",
+    "no_hits": "Keine Treffer für «{q}».",
     "h_history": "Preisverlauf",
     "c_history": "Echte historische Preise (Open Prices) plus tägliche Schnappschüsse. Punkte = beobachtete Preise.",
     "l_product_h": "Produkt (mit Preishistorie)",
@@ -54,6 +59,10 @@ I18N = {
     "c_best": "Cheapest at **{best}** (€{bp:.2f}) — {worst} €{wp:.2f} → {r:.2f}× difference.",
     "h_spreads": "Biggest price spreads",
     "x_spreads": "priciest ÷ cheapest shelf",
+    "h_search": "Search a category — every product, every chain",
+    "c_search": "Each dot is one product; rows are chains. Note pack sizes differ — hover for details.",
+    "l_search": "Search, e.g. eier · bio eier · milch · kaffee",
+    "no_hits": "No matches for “{q}”.",
     "h_history": "Price over time",
     "c_history": "Real historical prices (Open Prices) plus daily snapshots. Dots are observed prices.",
     "l_product_h": "Product (with price history)",
@@ -77,6 +86,10 @@ I18N = {
     "c_best": "Φθηνότερα στο **{best}** (€{bp:.2f}) — {worst} €{wp:.2f} → διαφορά {r:.2f}×.",
     "h_spreads": "Οι μεγαλύτερες διαφορές τιμής",
     "x_spreads": "ακριβότερο ÷ φθηνότερο ράφι",
+    "h_search": "Αναζήτηση κατηγορίας — όλα τα προϊόντα, όλες οι αλυσίδες",
+    "c_search": "Κάθε κουκκίδα είναι ένα προϊόν· οι γραμμές είναι αλυσίδες. Προσοχή: οι συσκευασίες διαφέρουν — λεπτομέρειες στο hover.",
+    "l_search": "Αναζήτηση, π.χ. eier · bio eier · milch · kaffee",
+    "no_hits": "Κανένα αποτέλεσμα για «{q}».",
     "h_history": "Εξέλιξη τιμής στον χρόνο",
     "c_history": "Πραγματικές ιστορικές τιμές (Open Prices) και ημερήσια στιγμιότυπα. Οι κουκκίδες είναι παρατηρημένες τιμές.",
     "l_product_h": "Προϊόν (με ιστορικό τιμών)",
@@ -132,6 +145,10 @@ def load():
 
 
 df = load()
+CAT8 = ["#1baf7a", "#eb6834", "#4a3aa7", "#eda100", "#e87ba4", "#008300", "#2a78d6", "#e34948"]
+_rank = df.groupby("retailer").size().sort_values(ascending=False).index
+CHAIN_COLOR = {c: CAT8[i] for i, c in enumerate(_rank[:8])}
+chain_c = lambda c: CHAIN_COLOR.get(c, "#898781")
 ean_df = df[df.ean_barcode != ""]
 counts = ean_df.groupby("ean_barcode")["retailer"].nunique()
 multi_eans = counts[counts >= 2].index
@@ -151,7 +168,7 @@ wins = (cmp_df[cmp_df.price_eur == mins].groupby("retailer")["ean_barcode"]
         .nunique().sort_values())
 fig = go.Figure(go.Bar(
     x=wins.values, y=wins.index, orientation="h",
-    marker_color=TEAL, width=0.55,
+    marker_color=[chain_c(c) for c in wins.index], width=0.55,
     text=wins.values, textposition="outside", textfont=dict(color=INK2),
     hovertemplate="%{y}: " + t("hover_wins") + " %{x} " + t("wins_unit") + "<extra></extra>"))
 st.plotly_chart(style(fig, height=60 + 32 * len(wins)), use_container_width=True)
@@ -165,11 +182,11 @@ options = spread.sort_values("count", ascending=False)
 choice = st.selectbox(t("l_product"), options.index,
                       format_func=lambda e: f"{options.loc[e,'label'][:70]}  ·  {e}")
 sel = cmp_df[cmp_df.ean_barcode == choice].sort_values("price_eur", ascending=False)
-colors = [TEAL_DARK if p == sel.price_eur.min() else TEAL for p in sel.price_eur]
 fig = go.Figure(go.Bar(
     x=sel.price_eur, y=sel.retailer, orientation="h",
-    marker_color=colors, width=0.55,
-    text=[f"€{p:.2f}" for p in sel.price_eur], textposition="outside",
+    marker_color=[chain_c(c) for c in sel.retailer], width=0.55,
+    text=[f"€{p:.2f} ✓" if p == sel.price_eur.min() else f"€{p:.2f}"
+          for p in sel.price_eur], textposition="outside",
     textfont=dict(color=INK2),
     customdata=sel[["price_date", "source"]],
     hovertemplate="%{y}: €%{x:.2f} · %{customdata[0]} · %{customdata[1]}<extra></extra>"))
@@ -182,14 +199,57 @@ if best.price_eur < worst.price_eur:
                  worst=worst.retailer, wp=worst.price_eur,
                  r=worst.price_eur / best.price_eur))
 
-# ── 3 · biggest spreads ──────────────────────────────────────────────────────
+# ── 3 · category search: every product, every chain ─────────────────────────
+st.subheader(t("h_search"))
+q2 = st.text_input(t("l_search"), value="eier")
+if q2.strip():
+    hits = df[df.product_name.str.lower().str.contains(q2.strip().lower(), na=False)]
+    if not len(hits):
+        st.caption(t("no_hits", q=q2))
+    else:
+        order = (hits.groupby("retailer")["price_eur"].median()
+                     .sort_values(ascending=False).index)
+        figs = px.strip(hits, x="price_eur", y="retailer", color="retailer",
+                        hover_data={"product_name": True, "price_eur": ":.2f",
+                                    "source": True, "retailer": False},
+                        color_discrete_map={c: chain_c(c) for c in hits.retailer.unique()},
+                        category_orders={"retailer": list(order)})
+        figs.update_traces(marker=dict(size=9, opacity=0.85,
+                                       line=dict(width=1, color="white")),
+                           jitter=0.5)
+        figs.update_xaxes(title_text="€", title_font_color=MUTED)
+        figs.update_yaxes(title_text="")
+        # per-chain median tick, drawn in the chain's own color
+        med = hits.groupby("retailer")["price_eur"].median()
+        for chain, mv in med.items():
+            figs.add_scatter(x=[mv], y=[chain], mode="markers",
+                             marker=dict(symbol="line-ns-open", size=26,
+                                         line=dict(width=3, color=chain_c(chain))),
+                             showlegend=False,
+                             hovertemplate=f"{chain} median: €{mv:.2f}<extra></extra>")
+        st.plotly_chart(style(figs, height=90 + 40 * hits.retailer.nunique()),
+                        use_container_width=True)
+        st.caption(" · ".join(f"{c}: {n}" for c, n in
+                              hits.retailer.value_counts().head(8).items()))
+
+# ── 3b · biggest spreads ─────────────────────────────────────────────────────
 st.subheader(t("h_spreads"))
 sp = spread[spread["min"] > 0].copy()
 sp["ratio"] = sp["max"] / sp["min"]
 top = sp[sp.ratio > 1.01].sort_values("ratio").tail(12)
+def teal_ramp(vals, lo="#c9ead9", hi="#0b7350"):
+    import colorsys
+    l, h = [int(lo[i:i+2],16) for i in (1,3,5)], [int(hi[i:i+2],16) for i in (1,3,5)]
+    mn, mx = min(vals), max(vals)
+    out = []
+    for v in vals:
+        f = 0.0 if mx == mn else (v - mn) / (mx - mn)
+        out.append("#" + "".join(f"{round(a+(b-a)*f):02x}" for a, b in zip(l, h)))
+    return out
+
 fig = go.Figure(go.Bar(
     x=top.ratio, y=[l[:48] for l in top.label], orientation="h",
-    marker_color=TEAL, width=0.55,
+    marker_color=teal_ramp(list(top.ratio)), width=0.55,
     text=[f"{r:.1f}×" for r in top.ratio], textposition="outside",
     textfont=dict(color=INK2),
     customdata=top[["min", "max"]],
@@ -198,8 +258,6 @@ fig.update_xaxes(title_text=t("x_spreads"), title_font_color=MUTED)
 st.plotly_chart(style(fig, height=60 + 32 * len(top)), use_container_width=True)
 
 # ── 4 · price over time ──────────────────────────────────────────────────────
-CAT8 = ["#1baf7a", "#eb6834", "#4a3aa7", "#eda100", "#e87ba4", "#008300", "#2a78d6", "#e34948"]
-
 @st.cache_data
 def load_history():
     try:
@@ -213,8 +271,6 @@ def load_history():
 hist = load_history()
 if len(hist):
     # global fixed chain→color map (color follows the entity, never the filter)
-    chain_rank = hist.groupby("retailer").size().sort_values(ascending=False).index
-    CHAIN_COLOR = {c: CAT8[i] for i, c in enumerate(chain_rank[:8])}
     st.subheader(t("h_history"))
     st.caption(t("c_history"))
     hh = hist[hist.ean_barcode != ""]
@@ -231,8 +287,8 @@ if len(hist):
             if len(grp) < 2 and len(hsel.retailer.unique()) > 6:
                 continue
             fig.add_scatter(x=grp.date, y=grp.price_eur, mode="lines+markers",
-                            name=chain, line=dict(width=2, color=CHAIN_COLOR.get(chain, "#898781")),
-                            marker=dict(size=8, color=CHAIN_COLOR.get(chain, "#898781")),
+                            name=chain, line=dict(width=2, color=chain_c(chain)),
+                            marker=dict(size=8, color=chain_c(chain)),
                             hovertemplate=chain + " · %{x|%d.%m.%Y}: €%{y:.2f}<extra></extra>")
         fig.update_yaxes(title_text="€", title_font_color=MUTED, rangemode="tozero")
         st.plotly_chart(style(fig, height=400, showlegend=True), use_container_width=True)
