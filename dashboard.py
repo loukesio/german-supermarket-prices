@@ -13,8 +13,8 @@ import streamlit as st
 # ── design tokens (validated palette) ────────────────────────────────────────
 INK, INK2, MUTED = "#0b0b0b", "#52514e", "#898781"
 GRID, BASELINE = "#e1e0d9", "#c3c2b7"
-BLUE, BLUE_DARK = "#2a78d6", "#0d366b"
-CAT = {"open-prices": "#2a78d6", "dm-website": "#eb6834", "marktguru-offers": "#1baf7a"}
+TEAL, TEAL_DARK = "#0f8f63", "#0b7350"
+CAT = {"open-prices": "#1baf7a", "dm-website": "#eb6834", "marktguru-offers": "#4a3aa7"}
 
 # ── i18n ─────────────────────────────────────────────────────────────────────
 I18N = {
@@ -151,7 +151,7 @@ wins = (cmp_df[cmp_df.price_eur == mins].groupby("retailer")["ean_barcode"]
         .nunique().sort_values())
 fig = go.Figure(go.Bar(
     x=wins.values, y=wins.index, orientation="h",
-    marker_color=BLUE, width=0.55,
+    marker_color=TEAL, width=0.55,
     text=wins.values, textposition="outside", textfont=dict(color=INK2),
     hovertemplate="%{y}: " + t("hover_wins") + " %{x} " + t("wins_unit") + "<extra></extra>"))
 st.plotly_chart(style(fig, height=60 + 32 * len(wins)), use_container_width=True)
@@ -165,7 +165,7 @@ options = spread.sort_values("count", ascending=False)
 choice = st.selectbox(t("l_product"), options.index,
                       format_func=lambda e: f"{options.loc[e,'label'][:70]}  ·  {e}")
 sel = cmp_df[cmp_df.ean_barcode == choice].sort_values("price_eur", ascending=False)
-colors = [BLUE_DARK if p == sel.price_eur.min() else BLUE for p in sel.price_eur]
+colors = [TEAL_DARK if p == sel.price_eur.min() else TEAL for p in sel.price_eur]
 fig = go.Figure(go.Bar(
     x=sel.price_eur, y=sel.retailer, orientation="h",
     marker_color=colors, width=0.55,
@@ -189,7 +189,7 @@ sp["ratio"] = sp["max"] / sp["min"]
 top = sp[sp.ratio > 1.01].sort_values("ratio").tail(12)
 fig = go.Figure(go.Bar(
     x=top.ratio, y=[l[:48] for l in top.label], orientation="h",
-    marker_color=BLUE, width=0.55,
+    marker_color=TEAL, width=0.55,
     text=[f"{r:.1f}×" for r in top.ratio], textposition="outside",
     textfont=dict(color=INK2),
     customdata=top[["min", "max"]],
@@ -198,7 +198,7 @@ fig.update_xaxes(title_text=t("x_spreads"), title_font_color=MUTED)
 st.plotly_chart(style(fig, height=60 + 32 * len(top)), use_container_width=True)
 
 # ── 4 · price over time ──────────────────────────────────────────────────────
-CAT8 = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
+CAT8 = ["#1baf7a", "#eb6834", "#4a3aa7", "#eda100", "#e87ba4", "#008300", "#2a78d6", "#e34948"]
 
 @st.cache_data
 def load_history():
